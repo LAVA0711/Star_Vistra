@@ -1,0 +1,70 @@
+name: frontend_1
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.7.2
+dependencies:
+  flutter:
+    sdk: flutter
+
+  webview_flutter: ^4.3.4
+
+  # HTTP client for network requests
+  http: ^0.13.6
+
+  # mongo db
+  mongo_dart: ^0.10.4
+
+  # Dio for network requests
+  dio: ^4.0.0
+
+  # Provider for state management
+  provider: ^6.0.0
+  path_provider: ^2.0.15
+
+  # Flutter Map for displaying maps
+  flutter_map: ^2.0.0
+
+  # latlong2 for coordinates
+  latlong2: ^0.8.0
+
+  # Permission handler
+  permission_handler: ^10.4.5
+
+  flutter_launcher_icons: ^0.13.1
+
+  #geolocator share_handler:
+  geolocator: ^9.0.2
+
+  # Cupertino icons
+  cupertino_icons: ^1.0.8
+
+  # Video player and Chewie
+  video_player: ^2.9.3
+  chewie: ^1.10.0
+
+  # Math support
+  vector_math: any
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+dependency_overrides:
+  geolocator_android: ^5.0.1
+flutter_launcher_icons:
+  android: "launcher_icon"
+  image_path: "assets/logo.png"
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/models/
+    - assets/videos/background.mp4
+    - assets/cesium/
+    - assets/cesium/index.html
+    - assets/ar/

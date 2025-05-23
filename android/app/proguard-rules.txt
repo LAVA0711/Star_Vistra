@@ -1,0 +1,74 @@
+# Add project specific ProGuard rules here.
+# You can control the set of applied configuration files using the
+# proguardFiles setting in build.gradle.
+
+# Flutter wrapper
+-keep class io.flutter.app.** { *; }
+-keep class io.flutter.plugin.**  { *; }
+-keep class io.flutter.util.**  { *; }
+-keep class io.flutter.view.**  { *; }
+-keep class io.flutter.**  { *; }
+-keep class io.flutter.plugins.**  { *; }
+
+# Keep ARCore classes to fix missing class errors
+-keep class com.google.ar.** { *; }
+-keep class com.google.ar.sceneform.** { *; }
+-keep class com.google.ar.sceneform.animation.** { *; }
+-keep class com.google.ar.sceneform.assets.** { *; }
+-keep class com.google.ar.sceneform.rendering.** { *; }
+-keep class com.google.ar.sceneform.utilities.** { *; }
+-dontwarn com.google.ar.**
+
+# Keep desugar runtime classes
+-keep class com.google.devtools.build.android.desugar.runtime.** { *; }
+-dontwarn com.google.devtools.build.android.desugar.runtime.**
+
+# AR Flutter Plugin specific rules
+-keep class io.carius.lars.ar_flutter_plugin.** { *; }
+-dontwarn io.carius.lars.ar_flutter_plugin.**
+
+# Handle missing Sceneform classes by ignoring warnings
+-dontwarn com.google.ar.sceneform.animation.AnimationEngine
+-dontwarn com.google.ar.sceneform.animation.AnimationLibraryLoader
+-dontwarn com.google.ar.sceneform.assets.Loader
+-dontwarn com.google.ar.sceneform.assets.ModelData
+-dontwarn com.google.ar.sceneform.utilities.SceneformBufferUtils
+
+# Android API 35 compatibility
+-dontwarn android.window.**
+-dontwarn androidx.window.**
+
+# Keep native method names
+-keepclassmembers class * {
+    native <methods>;
+}
+
+# Keep classes with native methods
+-keepclasseswithmembernames class * {
+    native <methods>;
+}
+
+# Generic Android rules
+-keepattributes *Annotation*
+-keepattributes Signature
+-keepattributes InnerClasses
+-keepattributes EnclosingMethod
+
+# Keep Serializable classes
+-keepnames class * implements java.io.Serializable
+-keepclassmembers class * implements java.io.Serializable {
+    static final long serialVersionUID;
+    private static final java.io.ObjectStreamField[] serialPersistentFields;
+    !static !transient <fields>;
+    private void writeObject(java.io.ObjectOutputStream);
+    private void readObject(java.io.ObjectInputStream);
+    java.lang.Object writeReplace();
+    java.lang.Object readResolve();
+}
+
+# Remove logging in release builds
+-assumenosideeffects class android.util.Log {
+    public static *** d(...);
+    public static *** v(...);
+    public static *** i(...);
+}

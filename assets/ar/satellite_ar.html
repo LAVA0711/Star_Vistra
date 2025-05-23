@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Satellite AR Tracker</title>
+
+    <!-- A-Frame and AR.js -->
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/aframe/build/aframe-ar-nft.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        .ar-controls {
+            position: fixed;
+            top: 60px;  /* Adjusted for Flutter AppBar */
+            left: 10px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+        }
+
+        .satellite-info {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            font-size: 14px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 18px;
+            z-index: 2000;
+        }
+
+        .satellite-count {
+            background: rgba(0, 128, 255, 0.8);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+<div id="loadingOverlay" class="loading-overlay">
+    <div>
+        <div>🛰️ Initializing AR Camera...</div>
+        <div style="font-size: 14px; margin-top: 10px;">Point camera at AR marker</div>
+    </div>
+</div>
+
+<div class="ar-controls">
+    <div>🛰️ AR Satellite Tracker</div>
+    <div>Point camera at the barcode marker</div>
+    <div id="satelliteCount" class="satellite-count">Satellites: 0</div>
+    <button onclick="toggleSatelliteInfo()">Toggle Info</button>
+</div>
+
+<div id="satelliteInfo" class="satellite-info">
+    <h3>Satellite Information</h3>
+    <p>Status: Waiting for satellite data...</p>
+    <div id="satelliteList"></div>
+</div>
+
+<!-- AR Scene -->
+<a-scene
+        vr-mode-ui="enabled: false"
+        arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+        renderer="logarithmicDepthBuffer: true;"
+        embedded
+        style="height: 100vh; width: 100vw;"
+        id="arScene">
+
+    <!-- Assets -->
+    <a-assets>
+        <!-- Satellite component mixins for reuse -->
+        <a-mixin id="satellite-body"
+                 geometry="primitive: box; width: 0.5; height: 0.2; depth: 0.3"
+                 material="color: #4CC3D9; metalness: 0.6; roughness: 0.4">
+        </a-mixin>
+
+        <a-mixin id="solar-panel"
+                 geometry="primitive: plane; width: 0.6; height: 0.1"
+                 material="color: #1A1A1A; metalness: 0.8; roughness: 0.2">
+        </a-mixin>
+
+        <a-mixin id="antenna"
+                 geometry="primitive: cylinder; radius: 0.02; height: 0.3"
+                 material="color: #FF6B6B">
+        </a-mixin>
+    </a-assets>
+
+    <!-- Lighting -->
+    <a-light type="ambient" color="#404040" intensity="0.4"></a-light>
+    <a-light type="directional" position="0 1 1" color="#ffffff" intensity="0.6"></a-light>
+
+    <!-- AR Marker (using barcode marker) -->
+    <a-marker type="barcode" value="1" smooth="true" smoothCount="10" smoothTolerance="0.01" smoothThreshold="5"
+              id="mainMarker">
+        <!-- Container for all satellites -->
+        <a-entity id="satelliteContainer" position="0 0 0">
+            <!-- Satellites will be dynamically added here -->
+        </a-entity>
+
+        <!-- Earth reference (optional) -->
+        <a-sphere id="earthReference"
+                  position="0 -3 0"
+                  radius="1"
+                  color="#4A90E2"
+                  opacity="0.2"
+                  visible="false">
+        </a-sphere>
+    </a-marker>
+
+    <!-- Camera -->
+    <a-entity camera
+              look-controls="enabled: false"
+              arjs-look-controls="smoothingFactor: 0.1"
+              id="arCamera">
+    </a-entity>
+</a-scene>
+
+<script>
+    // Global variables
+    let satellites = [];
+    let userLocation = null;
+    let arReady = false;
+    let markerVisible = false;
+
+    // AR Scene initialization
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('🛰️ AR Satellite Tracker initialized');
+
+        // Wait for AR scene to load
+        const scene = document.querySelector('a-scene');
+        if (scene.hasLoaded) {
+            onSceneLoaded();
+        } else {
+            scene.addEventListener('loaded', onSceneLoaded);
+        }
+
+        // Marker detection events
+        const marker = document.getElementById('mainMarker');
+        marker.addEventListener('markerFound', onMarkerFound);
+        marker.addEventListener('markerLost', onMarkerLost);
+    });
+
+    function onSceneLoaded() {
+        console.log('📷 AR Scene loaded');
+        arReady = true;
+        hideLoadingOverlay();
+        sendMessageToFlutter('arReady', {});
+    }
+
+    function onMarkerFound() {
+        console.log('🎯 AR Marker found');
+        markerVisible = true;
+        sendMessageToFlutter('markerFound', {});
+    }
+
+    function onMarkerLost() {
+        console.log('❌ AR Marker lost');
+        markerVisible = false;
+        sendMessageToFlutter('markerLost', {});
+    }
+
+    function hideLoadingOverlay() {
+        const overlay = document.getElementById('loadingOverlay');
+        if (overlay) {
+            overlay.style.display = 'none';
+        }
+    }
+
+    // Communication with Flutter
+    function sendMessageToFlutter(type, data) {
+        const message = {
+            type: type,
+            data: data,
+            timestamp: Date.now()
+        };
+
+        // For webview_flutter
+        if (window.FlutterChannel) {
+            window.FlutterChannel.postMessage(JSON.stringify(message));
+        }
+
+        console.log('📤 Sent to Flutter:', message);
+    }
+
+    // Handle messages from Flutter
+    window.addEventListener('flutterMessage', function(event) {
+        console.log('📥 Received from Flutter:', event.detail);
+
+        if (event.detail.type === 'updateSatellites') {
+            updateSatellites(event.detail.data);
+        } else if (event.detail.type === 'updateSatellite') {
+            updateSingleSatellite(event.detail.data);
+        }
+    });
+
+    // Update satellites from Flutter backend data
+    function updateSatellites(data) {
+        satellites = data.satellites || [];
+        userLocation = data.userLocation || null;
+
+        console.log(`🛰️ Received ${satellites.length} satellites`);
+
+        // Clear existing satellites
+        clearSatellites();
+
+        // Add new satellites
+        if (satellites.length > 0) {
+            addSatellitesToScene();
+            updateSatelliteInfo();
+            updateSatelliteCount();
+            sendMessageToFlutter('satelliteAdded', { count: satellites.length });
+        } else {
+            updateSatelliteInfo('No satellites found above your location');
+        }
+    }
+
+    // Clear existing satellites from scene
+    function clearSatellites() {
+        const container = document.getElementById('satelliteContainer');
+        if (container) {
+            // Remove all satellite entities
+            const satelliteEntities = container.querySelectorAll('.satellite-entity');
+            satelliteEntities.forEach(entity => {
+                container.removeChild(entity);
+            });
+        }
+    }
+
+    // Add satellites to AR scene
+    function addSatellitesToScene() {
+        const container = document.getElementById('satelliteContainer');
+        if (!container || !arReady) {
+            console.log('❌ Container not ready or AR not initialized');
+            return;
+        }
+
+        satellites.forEach((satellite, index) => {
+            createSatelliteEntity(satellite, index);
+        });
+    }
+
+    // Create individual satellite entity
+    function createSatelliteEntity(satellite, index) {
+        const container = document.getElementById('satelliteContainer');
+
+        // Create main satellite group
+        const satelliteGroup = document.createElement('a-entity');
+        satelliteGroup.setAttribute('class', 'satellite-entity');
+        satelliteGroup.setAttribute('id', `satellite-${satellite.id || index}`);
+        satelliteGroup.setAttribute('position', `${satellite.x} ${satellite.y} ${satellite.z}`);
+
+        // Satellite body
+        const body = document.createElement('a-box');
+        body.setAttribute('mixin', 'satellite-body');
+        body.setAttribute('position', '0 0.5 0');
+        body.setAttribute('animation', 'property: rotation; to: 360 360 0; loop: true; dur: 10000');
+
+        // Solar panels
+        const leftPanel = document.createElement('a-plane');
+        leftPanel.setAttribute('mixin', 'solar-panel');
+        leftPanel.setAttribute('position', '-0.7 0.5 0');
+        leftPanel.setAttribute('rotation', '0 0 90');
+
+        const rightPanel = document.createElement('a-plane');
+        rightPanel.setAttribute('mixin', 'solar-panel');
+        rightPanel.setAttribute('position', '0.7 0.5 0');
+        rightPanel.setAttribute('rotation', '0 0 90');
+
+        // Antenna
+        const antenna = document.createElement('a-cylinder');
+        antenna.setAttribute('mixin', 'antenna');
+        antenna.setAttribute('position', '0 0.8 0');
+
+        // Satellite name label
+        const label = document.createElement('a-text');
+        label.setAttribute('value', satellite.name || 'Unknown');
+        label.setAttribute('position', '0 1.2 0');
+        label.setAttribute('align', 'center');
+        label.setAttribute('color', '#FFFFFF');
+        label.setAttribute('scale', '0.5 0.5 0.5');
+        label.setAttribute('look-at', '[camera]');
+
+        // Optional orbit visualization for ISS or main satellites
+        if (satellite.name && satellite.name.toLowerCase().includes('iss')) {
+            const orbit = document.createElement('a-ring');
+            orbit.setAttribute('position', '0 0 0');
+            orbit.setAttribute('rotation', '90 0 0');
+            orbit.setAttribute('radius-inner', '2.8');
+            orbit.setAttribute('radius-outer', '3');
+            orbit.setAttribute('color', '#00FF00');
+            orbit.setAttribute('opacity', '0.3');
+            orbit.setAttribute('animation', 'property: rotation; to: 90 360 0; loop: true; dur: 20000');
+            satelliteGroup.appendChild(orbit);
+        }
+
+        // Assemble satellite
+        satelliteGroup.appendChild(body);
+        satelliteGroup.appendChild(leftPanel);
+        satelliteGroup.appendChild(rightPanel);
+        satelliteGroup.appendChild(antenna);
+        satelliteGroup.appendChild(label);
+
+        // Add entrance animation
+        satelliteGroup.setAttribute('scale', '0 0 0');
+        satelliteGroup.setAttribute('animation__scale', `property: scale; from: 0 0 0; to: 1 1 1; dur: 1000; delay: ${index * 200}`);
+
+        // Add to container
+        container.appendChild(satelliteGroup);
+
+        console.log(`🛰️ Added satellite: ${satellite.name} at position (${satellite.x}, ${satellite.y}, ${satellite.z})`);
+    }
+
+    // Update single satellite (for real-time updates)
+    function updateSingleSatellite(satelliteData) {
+        const satelliteEntity = document.getElementById(`satellite-${satelliteData.id}`);
+        if (satelliteEntity && satelliteData.position) {
+            satelliteEntity.setAttribute('position',
+                `${satelliteData.position.x} ${satelliteData.position.y} ${satelliteData.position.z}`
+            );
+        }
+    }
+
+    // Update satellite information display
+    function updateSatelliteInfo(message = null) {
+        const infoPanel = document.getElementById('satelliteInfo');
+        const satelliteList = document.getElementById('satelliteList');
+
+        if (message) {
+            infoPanel.innerHTML = `<h3>Satellite Information</h3><p>${message}</p>`;
+            return;
+        }
+
+        if (satellites.length === 0) {
+            infoPanel.innerHTML = '<h3>Satellite Information</h3><p>No satellites available</p>';
+            return;
+        }
+
+        let listHTML = '';
+        satellites.forEach((satellite, index) => {
+            listHTML += `
+                <div style="margin-bottom: 10px; padding: 8px; background: rgba(255,255,255,0.1); border-radius: 5px;">
+                    <strong>${satellite.name || `Satellite ${index + 1}`}</strong><br>
+                    <small>Altitude: ${satellite.altitude ? satellite.altitude.toFixed(1) + ' km' : 'Unknown'}</small><br>
+                    <small>Position: ${satellite.latitude ? satellite.latitude.toFixed(4) : 'N/A'}, ${satellite.longitude ? satellite.longitude.toFixed(4) : 'N/A'}</small>
+                </div>
+            `;
+        });
+
+        infoPanel.innerHTML = `
+            <h3>Satellites Above You (${satellites.length})</h3>
+            <div id="satelliteList">${listHTML}</div>
+        `;
+    }
+
+    // Update satellite count display
+    function updateSatelliteCount() {
+        const countElement = document.getElementById('satelliteCount');
+        if (countElement) {
+            countElement.textContent = `Satellites: ${satellites.length}`;
+        }
+    }
+
+    // Toggle satellite information display
+    function toggleSatelliteInfo() {
+        const infoPanel = document.getElementById('satelliteInfo');
+        infoPanel.classList.toggle('hidden');
+    }
+
+    // Send periodic updates to Flutter (optional)
+    setInterval(() => {
+        if (satellites.length > 0 && markerVisible) {
+            sendMessageToFlutter('satellitePosition', {
+                satellites: satellites.map(sat => ({
+                    id: sat.id,
+                    name: sat.name,
+                    visible: markerVisible
+                }))
+            });
+        }
+    }, 5000);
+
+    // Error handling
+    window.addEventListener('error', function(e) {
+        console.error('❌ AR Error:', e.message);
+        sendMessageToFlutter('error', { message: e.message });
+    });
+
+    // Handle AR.js specific events
+    window.addEventListener('arjs-video-loaded', function() {
+        console.log('📹 AR camera loaded successfully');
+    });
+
+    console.log('🚀 AR Satellite Tracker script loaded');
+</script>
+</body>
+</html>
